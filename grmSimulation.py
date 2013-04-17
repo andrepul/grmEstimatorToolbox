@@ -22,16 +22,26 @@
  
     This module contains the capabilities required for the simulation
     of the Generalized Roy Model.
+    
+    ===================================
+    Changes made by Andre for the exam
+    ===================================
+    0) Change function to depend on numAgents, which will be given by ParallelRun script
+    1) Calculate treatment effects
+    2) Assert they are what they are supposed to be
+    3) Change output: return a dictionary containing simulated data and TE's, which will
+    be used by the "executor" ParallelRun script to export text files.
  
 '''
 
 # standard library
 import numpy as np
 
-# project library
-import grmReader  
 
-def simulate():
+# project library
+import grmReader
+  
+def simulate(numAgents):
     ''' Simulate data generation process of the Generalized Roy Model.
     
     '''
@@ -40,8 +50,10 @@ def simulate():
 
     ''' Distribute parametrization and (limited) type conversions.
     '''
-    numAgents  = initDict['numAgents']
-    fileName   = initDict['fileName']
+    
+    #Turning off numAgents and fileName to let the ParallelRun do the job
+    #numAgents  = initDict['numAgents']
+    #fileName   = initDict['fileName']
     
     Y1_beta    = np.array(initDict['Y1_beta'])
     Y0_beta    = np.array(initDict['Y0_beta'])
@@ -66,21 +78,21 @@ def simulate():
     numCovarsOut  = Y1_beta.shape[0]
     numCovarsCost = D_gamma.shape[0]
     
-    U1V_cov      = U1V_rho*np.sqrt(U1_var)*np.sqrt(V_var)
-    U0V_cov      = U0V_rho*np.sqrt(U0_var)*np.sqrt(V_var)
+    U1V_cov       = U1V_rho*np.sqrt(U1_var)*np.sqrt(V_var)
+    U0V_cov       = U0V_rho*np.sqrt(U0_var)*np.sqrt(V_var)
     
     ''' Simulate observable agent characteristics.
     '''
-    means = np.tile(0.0, numCovarsOut)
-    covs  = np.identity(numCovarsOut)
+    means  = np.tile(0.0, numCovarsOut)
+    covs   = np.identity(numCovarsOut)
     
     X      = np.random.multivariate_normal(means, covs, numAgents)
     X[:,0] = 1.0
     
-    means = np.tile(0.0, numCovarsCost)
-    covs  = np.identity(numCovarsCost)
+    means  = np.tile(0.0, numCovarsCost)
+    covs   = np.identity(numCovarsCost)
     
-    Z     = np.random.multivariate_normal(means, covs, numAgents)
+    Z      = np.random.multivariate_normal(means, covs, numAgents)
     
     ''' Construct level indicators for outcomes and choices. 
     '''
@@ -131,6 +143,17 @@ def simulate():
         # Observed outcomes.
         Y[i]  = D[i]*Y1[i] + (1.0 - D[i])*Y0[i]
         
+    ''' Calculating the treatment effects and exporting
+    '''
+            
+    ATE  = np.sum(Y1-Y0)/np.size(Y1-Y0)
+    ATT  = np.sum((Y1-Y0)[D==1])/np.size((Y1-Y0)[D==1])
+    ATUT = np.sum((Y1-Y0)[D==0])/np.size((Y1-Y0)[D==0])
+    
+    #Deactivating the output below, since we'll do it in ParallelRun
+    #np.savetxt('Treatments.txt', np.column_stack((ATE,ATT,ATUT)), fmt= '%8.3f')
+    
+        
     ''' Check quality of simulated sample. 
     '''
     assert (np.all(np.isfinite(Y1)))
@@ -152,13 +175,26 @@ def simulate():
     assert (D.dtype == 'float')
     
     assert ((D.all() in [1.0, 0.0]))
+    
+    assert (ATE.dtype == 'float')
+    assert (ATT.dtype == 'float')
+    assert (ATUT.dtype == 'float')
+
        
-    ''' Export sample to *.txt file for further processing. 
+    ''' Non longer export sample to *.txt file for further processing.
+    Instead, output to a variable to be gathered by ParallelRun 
     '''
-    np.savetxt(fileName, np.column_stack((Y, D, X, Z)), fmt= '%8.3f')
+    
+    variablesOutput  =  np.column_stack( (Y, D, X, Z)     )
+    treatmentsOutput =  np.column_stack( (ATE, ATT, ATUT) )
+    
+    return {'variables':variablesOutput, 'treatments': treatmentsOutput}
+    
+    #np.savetxt(fileName, np.column_stack((Y, D, X, Z)), fmt= '%8.3f')
     
 ''' Executable.
 '''
 if __name__ == '__main__':
     
     simulate()
+    
